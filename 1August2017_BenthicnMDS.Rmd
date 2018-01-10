@@ -1,0 +1,120 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+Benviro <- read.csv("/Users/imkri/Desktop/PhD/Seasonal Monitoring Experiment/Analysis/Benthic Community Composition/All benthic transects R2.csv", strip.white=T)
+head(Benviro)
+```
+
+```{r}
+colnames(Benviro)
+```
+```{r}
+library(dplyr)
+Benviro %>% mutate(Site=factor(Site)) %>% mutate(Year=factor(Year)) %>% mutate(Season=factor(Season)) %>% mutate(Depth=factor(Depth))
+Benviro.mds<-  metaMDS(Benviro[,(5:26)], k=2, autotransform = TRUE)
+```
+```{r}
+library(vegan)
+benthic.adonis<-adonis(Benviro[,(5:26)] ~Site*Season, data=Benviro, permutations = 9999)
+benthic.adonis
+```
+
+```{r}
+Benviro.mds$stress
+stressplot(Benviro.mds)
+plot(Benviro.mds)
+```
+```{r}
+Benviro.stnd<- Benviro %>% mutate(Site=factor(Site)) %>% mutate(Year=factor(Year)) %>% mutate(Season=factor(Season)) %>% mutate_if(is.numeric, function(x) x^0.25)
+Benviro.stnd<- wisconsin(Benviro[,5:26])
+```
+
+"Temperature_max"      "Temperature_min"     
+[29] "Temperature_variance" "Days.above.MMM"       "PAR_mean"             "PAR_SD"               "PAR_max_day"          "CO2_mean_day"         "CO2_mean_night"
+```{r}
+Benviro[,c("Temperature_max", "Temperature_min", "Temperature_variance", "Days.above.MMM",  "PAR_mean","PAR_SD","PAR_max_day", "CO2_mean_day","CO2_mean_night" )]
+```
+```{r}
+alias(lm(1:nrow(Benviro)~Temperature_max+ Temperature_min+ Days.above.MMM+ PAR_mean+ PAR_SD +PAR_max_day+ CO2_mean_day+ CO2_mean_night, data=Benviro[,c("Temperature_max", "Temperature_min", "Days.above.MMM","PAR_mean","PAR_SD","PAR_max_day", "CO2_mean_day","CO2_mean_night")]))
+```
+
+```{r}
+library(car)
+vif(lm(1:nrow(Benviro)~Temperature_max+ Temperature_min+ Days.above.MMM+ PAR_mean+ PAR_SD +PAR_max_day+ CO2_mean_day+ CO2_mean_night, data=Benviro[,c("Temperature_max", "Temperature_min", "Days.above.MMM","PAR_mean","PAR_SD","PAR_max_day", "CO2_mean_day","CO2_mean_night")]))
+```
+```{r}
+Benviro.rda<-rda(Benviro.stnd~Temperature_max+Temperature_min+Days.above.MMM+PAR_mean+PAR_SD+PAR_max_day+CO2_mean_day+CO2_mean_night, data=Benviro[,c("Temperature_max", "Temperature_min", "Days.above.MMM", "PAR_mean","PAR_SD","PAR_max_day", "CO2_mean_day","CO2_mean_night")], scale=FALSE, na.action = na.exclude)
+summary(Benviro.rda, display=NULL)
+```
+```{r}
+anova(Benviro.rda, by='margin')
+```
+
+```{r}
+ordiplot(Benviro.mds, type='text')
+Benviro.envfit<- envfit(Benviro.mds, Benviro[,c("Temperature_max", "Temperature_min", "Days.above.MMM",  "PAR_mean","PAR_SD","PAR_max_day", "CO2_mean_day","CO2_mean_night")], na.rm=TRUE, permu= 9999)
+plot(Benviro.envfit, display='Sites')
+```
+
+```{r}
+Benviro.envfit
+```
+
+```{r}
+Benviro.envfit.df<-as.data.frame(Benviro.envfit$vectors$arrows*sqrt(Benviro.envfit$vectors$r))
+Benviro.envfit.df$species<-rownames(Benviro.envfit.df)
+```
+
+```{r}
+Benviro.sites.scores<- as.data.frame(scores(Benviro.mds, display = 'sites'))
+Benviro.sites.scores<- data.frame(Benviro.sites.scores, Benviro)
+Benviro.species.scores<- as.data.frame(scores(Benviro.mds, display = 'species'))
+Benviro.species.scores$Species<- row.names(Benviro.species.scores)
+```
+```{r}
+Benviro.envfit.df$species
+```
+
+```{r}
+library(ggrepel)
+Benviro.sites.scores$Site <- factor(Benviro.sites.scores$Site, levels=c("Harry's Bommie 5m","Harry's Bommie 8m","Fourth Point 5m", "Fourth Point 8m","Harry's Tower","Inner Reef Flat", "Shallow Lagoon", "Deep Lagoon"))
+b1<-ggplot()+
+  geom_label_repel(data=Benviro.envfit.df,aes(x=NMDS1,y=NMDS2,label= species, show.legend=FALSE), size=5)+
+  geom_segment(data=Benviro.envfit.df,aes(x=0,xend=NMDS1,y=0,yend=NMDS2), linetype='solid', arrow=arrow(length=unit(0.5, 'cm')), color='grey', alpha=0.9, show.legend=FALSE) + 
+  geom_point(data=Benviro.sites.scores, aes(y=NMDS2, x=NMDS1, color=Site), size=2.5)+
+  geom_text_repel(data=Benviro.species.scores, aes(y=NMDS2, x=NMDS1, label=Species, hjust=-0.2),alpha=0.9,show.legend=FALSE)+ 
+  geom_segment(data=Benviro.species.scores, aes(y=0, x=0, yend=NMDS2, xend=NMDS1), linetype='solid', arrow=arrow(length=unit(0.3, 'cm')), color='grey',alpha=0.9, show.legend=FALSE)+
+  scale_color_manual("Site", values=c("Harry's Bommie 5m"= 'olivedrab3',"Harry's Bommie 8m"='darkseagreen2' ,"Fourth Point 5m"='darkslategray3' , "Fourth Point 8m"= 'plum4',"Harry's Tower"= 'pink',"Inner Reef Flat"='indianred1', "Shallow Lagoon"='sandybrown', "Deep Lagoon"='lightgoldenrod1'), labels=c("Harry's Bommie 5m","Harry's Bommie 8m","Fourth Point 5m", "Fourth Point 8m","Reef Crest","Inner Reef Flat", "Shallow Lagoon", "Deep Lagoon"))+
+  theme_classic()
+  #theme(legend.position="none")
+  #theme(legend.justification=c(0.05,1.1), legend.position=c(0.05,1.1), 
+        #legend.background = element_rect(fill="gray90",size=0.5, linetype="dotted"), 
+        #legend.title = element_text(size=16),
+        #legend.title.align=0.5,
+        #legend.text = element_text(size = 10))
+b1
+```
+
+
+```{r}
+b1<- b1+ theme(axis.text.y=element_blank(),
+            axis.text.x=element_blank(), 
+            panel.background= element_rect(fill=NA, color='black'),
+            legend.title.align=0.5)
+            #legend.position=c(0,1),
+            #legend.justification = c(0,1), 
+            #legend.background = element_rect(fill=NA,size=0.5, linetype="solid", colour ="black"),
+            #legend.title = element_text(size=12),
+            #legend.title.align=0.5,
+            #legend.text = element_text(vjust=0.5, size=10))
+b1
+```
+
+```{r}
+b1<- b1 +coord_equal()
+b1
+```
